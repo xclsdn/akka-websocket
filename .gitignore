@@ -7,3 +7,11 @@ project/plugins/project/
 .history
 .cache
 .lib/
+
+# Stores VSCode versions used for testing VSCode extensions
+.vscode-test
+.vscode
+
+# vscode Metals Extension
+.metals
+.bloop
