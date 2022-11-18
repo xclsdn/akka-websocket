@@ -16,9 +16,10 @@ import Chat._
 object Webserver extends App {
   implicit val system = ActorSystem(Chat.apply, "my-system")
   // needed for the future flatMap/onComplete in the end
-  val chatActor=system
+  val chatActor = system
   implicit val executionContext = system.executionContext
   // val actorChat= system.actorOf(Props[Chat]())
+  case class User(name: String)
   val route1 =
     path("hello") {
       get {
@@ -49,8 +50,12 @@ object Webserver extends App {
     }
 
   val websocketRoute =
-    path("websocket") {
-      handleWebSocketMessages(ws)
+    pathPrefix("websocket") {
+      path(Remaining) { name =>
+        {
+          handleWebSocketMessages(ws(name))
+        }
+      }
     }
   val routes = concat(route1, route3, route2, websocketRoute)
   val bindingFuture = Http().newServerAt("127.0.0.1", 9081).bind(routes)
@@ -74,8 +79,8 @@ object Webserver extends App {
         bm.dataStream.runWith(Sink.ignore)
         Nil
     }
-  
-  def ws: Flow[Message, Message, Any] = {
+
+  def ws(name: String): Flow[Message, Message, Any] = {
     val source: Source[TextMessage, Unit] =
       ActorSource
         .actorRef[String](
@@ -89,7 +94,7 @@ object Webserver extends App {
     val sink: Sink[Message, Future[Done]] = Sink
       .foreach[Message] {
         case tm: TextMessage =>
-          chatActor ! ProcessMessage("userName", tm.getStrictText)
+          chatActor ! ProcessMessage(name, tm.getStrictText)
         case _ =>
           println("User send unsupported message")
       }

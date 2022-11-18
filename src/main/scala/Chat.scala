@@ -14,7 +14,7 @@ object Chat {
       Behaviors.receiveMessage[ChatCommand] {
         case ProcessMessage(sender, content) =>
           val message = s"$sender: $content"
-          println("new msg")
+          println(s"new msg from ${sender}:${content}")
           messageQueue.enqueue(message)
           participants.foreach(ref => ref ! message)
           Behaviors.same
