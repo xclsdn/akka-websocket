@@ -2,18 +2,23 @@ import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
-import akka.http.scaladsl.model.ws.{Message,TextMessage,BinaryMessage}
+import akka.http.scaladsl.model.ws.{Message, TextMessage, BinaryMessage}
 import akka.http.scaladsl.server.Directives._
 import scala.io.StdIn
-import akka.stream.scaladsl.{Source,Flow,Sink,Keep}
-
-
-
+import akka.stream.scaladsl.{Source, Flow, Sink, Keep}
+import akka.stream.typed.scaladsl.ActorSource
+import akka.stream.OverflowStrategy
+import scala.concurrent.{ExecutionContextExecutor, Future}
+import akka.Done
+import akka.actor.ActorRef
+import Chat._
 
 object Webserver extends App {
-  implicit val system = ActorSystem(Behaviors.empty, "my-system")
+  implicit val system = ActorSystem(Chat.apply, "my-system")
   // needed for the future flatMap/onComplete in the end
+  val chatActor=system
   implicit val executionContext = system.executionContext
+  // val actorChat= system.actorOf(Props[Chat]())
   val route1 =
     path("hello") {
       get {
@@ -45,7 +50,7 @@ object Webserver extends App {
 
   val websocketRoute =
     path("websocket") {
-      handleWebSocketMessages(greeter)
+      handleWebSocketMessages(ws)
     }
   val routes = concat(route1, route3, route2, websocketRoute)
   val bindingFuture = Http().newServerAt("127.0.0.1", 9081).bind(routes)
@@ -69,5 +74,27 @@ object Webserver extends App {
         bm.dataStream.runWith(Sink.ignore)
         Nil
     }
+  
+  def ws: Flow[Message, Message, Any] = {
+    val source: Source[TextMessage, Unit] =
+      ActorSource
+        .actorRef[String](
+          PartialFunction.empty,
+          PartialFunction.empty,
+          5,
+          OverflowStrategy.fail
+        )
+        .map[TextMessage](TextMessage(_))
+        .mapMaterializedValue(sourceRef => chatActor ! AddNewUser(sourceRef))
+    val sink: Sink[Message, Future[Done]] = Sink
+      .foreach[Message] {
+        case tm: TextMessage =>
+          chatActor ! ProcessMessage("userName", tm.getStrictText)
+        case _ =>
+          println("User send unsupported message")
+      }
+
+    Flow.fromSinkAndSource(sink, source)
+  }
 
 }
