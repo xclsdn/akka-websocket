@@ -10,14 +10,18 @@ import akka.stream.typed.scaladsl.ActorSource
 import akka.stream.OverflowStrategy
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import akka.Done
-import akka.actor.ActorRef
 import Chat._
+import ChatServer._
+
+
 
 object Webserver extends App {
   implicit val system = ActorSystem(Chat.apply, "my-system")
   // needed for the future flatMap/onComplete in the end
   val chatActor = system
+  val chatServer = ActorSystem(ChatServer(), "chatServer")
   implicit val executionContext = system.executionContext
+
   // val actorChat= system.actorOf(Props[Chat]())
   case class User(name: String)
   val route1 =
@@ -67,18 +71,18 @@ object Webserver extends App {
 //   bindingFuture
 //     .flatMap(_.unbind()) // trigger unbinding from the port
 //     .onComplete(_ => system.terminate()) // and shutdown when done
-
-  def greeter: Flow[Message, Message, Any] =
-    Flow[Message].mapConcat {
-      case tm: TextMessage =>
-        TextMessage(
-          Source.single("Hello ") ++ tm.textStream ++ Source.single("!")
-        ) :: Nil
-      case bm: BinaryMessage =>
-        // ignore binary messages but drain content to avoid the stream being clogged
-        bm.dataStream.runWith(Sink.ignore)
-        Nil
-    }
+  // This is Akka Websocket smaple
+  // def greeter: Flow[Message, Message, Any] =
+  //   Flow[Message].mapConcat {
+  //     case tm: TextMessage =>
+  //       TextMessage(
+  //         Source.single("Hello ") ++ tm.textStream ++ Source.single("!")
+  //       ) :: Nil
+  //     case bm: BinaryMessage =>
+  //       // ignore binary messages but drain content to avoid the stream being clogged
+  //       bm.dataStream.runWith(Sink.ignore)
+  //       Nil
+  //   }
 
   def ws(name: String): Flow[Message, Message, Any] = {
     val source: Source[TextMessage, Unit] =
@@ -90,11 +94,34 @@ object Webserver extends App {
           OverflowStrategy.fail
         )
         .map[TextMessage](TextMessage(_))
-        .mapMaterializedValue(sourceRef => chatActor ! AddNewUser(sourceRef))
+        .mapMaterializedValue(sourceRef => {
+          chatActor ! AddNewUser(sourceRef)
+          chatServer ! Online(name, sourceRef)
+        })
     val sink: Sink[Message, Future[Done]] = Sink
       .foreach[Message] {
-        case tm: TextMessage =>
-          chatActor ! ProcessMessage(name, tm.getStrictText)
+        case tm: TextMessage => {
+          val msg:String=tm.getStrictText
+          msg match {
+            case ":list" =>
+              chatServer ! GetRoomList(name)
+            case s if s.startsWith(":create:") =>
+              chatServer ! CreateChatRoom(s.stripPrefix(":create:"))
+            case s if s.startsWith(":join:") =>
+              chatServer ! JoinChatRoom(s.stripPrefix(":join:"),name)
+                          case s if s.startsWith(":leave:") =>
+              chatServer ! LeaveChatRoom(s.stripPrefix(":leave:"),name)
+            case s if s.startsWith(":send:")=>
+              val t=s.stripPrefix(":send:")
+              val tt =t.split(":")
+              val roomName=tt(0)
+              val msg=tt(1)
+              chatServer ! SendMsgToRoom(roomName,msg,name)
+            case _ =>
+              chatActor ! ProcessMessage(name, msg)
+          }
+          
+        }
         case _ =>
           println("User send unsupported message")
       }
