@@ -43,7 +43,7 @@ object ChatServer {
       case (context, Online(userName, userRef)) =>
         println(s"${userName} add to chatServer")
         activeUsers(userName) = userRef
-        userRef ! "ChatServer Welcome you!"
+        userRef ! "Welcome connect to the chat room."
         ChatServer(activeUsers, chatRooms)
       case (context, JoinChatRoom(roomName, userName)) =>
         val roomRef = chatRooms(roomName)

@@ -62,15 +62,15 @@ object Webserver extends App {
       }
     }
   val routes = concat(route1, route3, route2, websocketRoute)
-  val bindingFuture = Http().newServerAt("127.0.0.1", 9081).bind(routes)
+  val bindingFuture = Http().newServerAt("0.0.0.0", 9081).bind(routes)
 
   println(
     s"Server now online. Please navigate to http://localhost:9080/hello\nPress RETURN to stop..."
   )
-//   StdIn.readLine() // let it run until user presses return
-//   bindingFuture
-//     .flatMap(_.unbind()) // trigger unbinding from the port
-//     .onComplete(_ => system.terminate()) // and shutdown when done
+  StdIn.readLine() // let it run until user presses return
+  bindingFuture
+    .flatMap(_.unbind()) // trigger unbinding from the port
+    .onComplete(_ => system.terminate()) // and shutdown when done
   // This is Akka Websocket smaple
   // def greeter: Flow[Message, Message, Any] =
   //   Flow[Message].mapConcat {
